@@ -19,7 +19,9 @@ def fetch_webpage_content(url):
         # Parse webpage content using BeautifulSoup
         soup = BeautifulSoup(response.content, 'html.parser')
         # Extract text content from all <p> tags, join them, and limit to 10000 characters
-        text_content = ' '.join(p.text for p in soup.find_all('p'))[:10000]
+        # text_content = ' '.join(p.text for p in soup.find_all('p'))[:10000]
+        text_content = soup.get_text()
+        text_content = text_content[:10000]
         print(f"\tWebpage length (num characters): {len(text_content)}")
         # Process text content with spaCy to split it into sentences
         doc = nlp(text_content)
@@ -64,16 +66,16 @@ def get_prompt_text(relation_type, sentence):
     # Relation types to specific prompt formats, one can use 1,2,3,4
     # TODO: We may need to get this more refined
     prompts = {
-        1: f"Given a sentence, extract all names of persons (subjects) and schools attended (objects). Extract only when subject and object are there. Ignore pronouns like he/she. Output: [Subject: PERSON'S NAME, Object: SCHOOL ATTENDED]\nSentence: {sentence}",
-        2: f"Given a sentence, extract all names of persons (subjects) and organizations they work for (objects). Extract only when subject and object are there. Ignore pronouns like he/she. Output: [Subject: PERSON'S NAME, Object: ORGANIZATION]\nSentence: {sentence}",
-        3: f"Given a sentence, extract all names of persons (subjects) and their living locations (objects). Extract only when subject and object are there. Ignore pronouns like he/she. Output: [Subject: PERSON'S NAME, Object: LOCATION]\nSentence: {sentence}",
-        4: f"Given a sentence, extract all organizations (subjects) and top member employees (objects). Extract only when subject and object are there. Ignore pronouns like he/she. Output: [Subject: ORGANIZATION, Object: PERSON'S NAME]\nSentence: {sentence}"
+        1: f"Given the sentence: \"{sentence}\" please identify all educational institutions mentioned and their relationships with the individuals named in the sentence. Specifically, focus on extracting relationships that indicate an educational affiliation, such as attending or working at these institutions. The \"Subject\" should be an individual's name or a group/category of professionals, and the \"Object\" should strictly be the name of the educational institution, without additional context or descriptions. Exclude articles, pronouns, and phrases that do not add meaningful information, such as \"not specified\", \"N/A\", \"not mentioned\", etc. For multiple subjects, provide separate entries for each person. Format the results as \"Subject: [entity]; Object: [institution],\" ensuring that the object is limited to only the institution's name and is presented cleanly and concisely.",
+        2: f"Given a sentence, extract all names of persons (subjects) and organizations they work for (objects). Extract only when subject and object are there. Output: [Subject: PERSON'S NAME, Object: ORGANIZATION]\nSentence: {sentence}",
+        3: f"Given a sentence, extract all names of persons (subjects) and their living locations (objects). Extract only when subject and object are there. Output: [Subject: PERSON'S NAME, Object: LOCATION]\nSentence: {sentence}",
+        4: f"Given a sentence, extract all organizations (subjects) and top member employees (objects). Extract only when subject and object are there. Output: [Subject: ORGANIZATION, Object: PERSON'S NAME]\nSentence: {sentence}"
     }
     return prompts.get(relation_type, "Invalid relation type.")
 
 # Function to get content generation from the Gemini API
 def get_gemini_completion(prompt_text, api_key, model_name='gemini-pro', max_tokens=100, temperature=0.2, top_p=1, top_k=32):
-    print("\tProcessing sentence for extraction ...")
+    # print("\tProcessing sentence for extraction ...")
     # Configure Gemini API with the provided API key
     genai.configure(api_key=api_key)
     
@@ -114,13 +116,15 @@ def main(args):
     for i, url in enumerate(urls, 1):
         print(f"\nURL ({i} / {len(urls)}): {url}")
         sentences = fetch_webpage_content(url)
-
-        for sentence in sentences:
+        num_sentences = len(sentences)
+        for j, sentence in enumerate(sentences):
+            if(j % 5 == 0):
+                print(f"Processed {j} / {num_sentences} sentences")
             if len(all_relations) < args.k:  # Only process new relations if below k
-                print(f"\tProcessing sentence: {sentence}")
+                # print(f"\tProcessing sentence: {sentence}")
                 prompt_text = get_prompt_text(args.r, sentence)
                 response_text = get_gemini_completion(prompt_text, args.gemini_api_key)
-                print(response_text)
+                # print(response_text)
 
                 # Accumulate only if new and unique and going up to k relations(would need to clarify)
                 if "Subject" in response_text and "Object" in response_text and response_text.strip() not in all_relations:
@@ -129,11 +133,11 @@ def main(args):
                     print(f"\tExtraction: {response_text.strip()}")
                     print("\t==========\n")
                     all_relations.add(response_text.strip())
-                else:
-                    print(f"\tNo valid relation extracted from this sentence or duplicate found.\n")
-            else:
+                # else:
+                    # print(f"\tNo valid relation extracted from this sentence or duplicate found.\n")
+            # else:
                 # Continue processing without accumulating, providing completeness of parsing
-                print(f"\tSkipped sentence processing after reaching {args.k} unique relations.")
+                # print(f"\tSkipped sentence processing after reaching {args.k} unique relations.")
 
     # Output all unique relations
     print(f"\n================== ALL RELATIONS for relation type {args.r} ( {len(all_relations)} ) =================")

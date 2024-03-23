@@ -8,11 +8,55 @@ from spanbert import SpanBERT
 from googleapiclient.discovery import build
 import sys
 import requests
-import module_spanbert
+import google.generativeai as genai 
+import module_spanbert as module_spanbert
+import re
+
+
+def check_string_regex(s):
+    # Pattern to match any of the specified words
+    pattern = r'none|not specified|N\/A'
+    # Search the string for any match
+    return not re.search(pattern, s, re.IGNORECASE)
+
+def get_prompt_text(relation_type, sentence):
+    # Relation types to specific prompt formats, one can use 1,2,3,4
+    # TODO: We may need to get this more refined
+    prompts = {
+        1: f"Given a sentence, extract all names of persons (subjects) and schools attended (objects). Extract only when subject and object are there. Don't extract pronouns unless it's declared in sentence. [Subject: PERSON'S NAME, Object: ORGANIZATION]\nSentence: {sentence}",
+        2: f"Given a sentence, extract all names of persons (subjects) and organizations they work for (objects). Extract only when subject and object are there. Output: [Subject: PERSON'S NAME, Object: ORGANIZATION]\nSentence: {sentence}",
+        3: f"Given a sentence, extract all names of persons (subjects) and their living locations (objects). Extract only when subject and object are there. Output: [Subject: PERSON'S NAME, Object: LOCATION]\nSentence: {sentence}",
+        4: f"Given a sentence, extract all organizations (subjects) and top member employees (objects). Extract only when subject and object are there. Output: [Subject: ORGANIZATION, Object: PERSON'S NAME]\nSentence: {sentence}"
+    }
+    return prompts.get(relation_type, "Invalid relation type.")
+
+# Function to get content generation from the Gemini API
+def get_gemini_completion(prompt_text, api_key, model_name='gemini-pro', max_tokens=100, temperature=0.2, top_p=1, top_k=32):
+    # print("\tProcessing sentence for extraction ...")
+    # Configure Gemini API with the provided API key
+    genai.configure(api_key=api_key)
+    
+    # Initialize Gemini model
+    model = genai.GenerativeModel(model_name)
+    # Set up configuration with parameters by following reference
+    generation_config = genai.types.GenerationConfig(
+        max_output_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k
+    )
+    
+    try:
+        # Create response based on the prompt text and configuration
+        response = model.generate_content(prompt_text, generation_config=generation_config)
+        return response.text
+    except Exception as e:
+        print(f"\tError during Gemini completion: {str(e)}")
+        return ""
 
 def spacy_process(raw_text):
-    print("          Annotating the webpage using spacy...")
-    nlp = spacy.load("en_core_web_sm")
+    print("\tAnnotating the webpage using spacy...")
+    nlp = spacy.load("en_core_web_lg")
     doc = nlp(raw_text)
     return doc
 
@@ -32,17 +76,18 @@ def get_documents(service, query, cx):
 
 def get_plain_text(url):
     # Send a GET request to the URL
-    print("          Fetching text from url ...")
+    print("\tFetching text from url ...")
     response = requests.get(url)
 
     # Check if the request was successful (status code 200)
     if response.status_code == 200:
         # Parse the HTML content using BeautifulSoup
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.content, 'html.parser')
 
         # Extract the plain text from the parsed HTML
-        plain_text = soup.get_text()
-
+        # plain_text = soup.get_text(strip=True)
+        text = ' '.join(soup.stripped_strings)
+        plain_text = ' '.join(text.split())
         # Truncate the text to its first 10,000 characters if it exceeds that length
         if len(plain_text) > 10000:
             plain_text = plain_text[:10000]
@@ -80,6 +125,10 @@ def main():
         sys.exit(1)
     _, model, api_key, cse_id, gemini_api_key, r, t, q, k = sys.argv
 
+    t = float(t)
+    r = int(r)
+    k = int(k)
+
     # Validation
     if model not in ['-spanbert', '-gemini']:
         sys.exit("Model must be '-spanbert' or '-gemini'.")
@@ -116,31 +165,58 @@ def main():
             print("No results found.")
             sys.exit(1)
             continue
-        print(f"=========== Iteration: {iteration} - Query: {q} ===========")
+        print(f"=========== Iteration: {iteration+1} - Query: {q} ===========\n")
         target_relations = {}
-
+        spanbert = SpanBERT("./pretrained_spanbert")
         for i, url in enumerate(items):
-            print(f"URL ( {i} / 10): {url}")
+            print(f"URL ( {i+1} / 10): {url}")
             raw_text = get_plain_text(url)
-            print(f"          Webpage length (num characters): {len(raw_text)}")
+            if raw_text == None:
+                continue
+            print(f"\tWebpage length (num characters): {len(raw_text)}")
             docs = spacy_process(raw_text)
-            num_of_sentences = len(docs)
-            print(f"Extracted {num_of_sentences} sentences. Processing each sentence one by one to check for presence of right pair of named entity types; if so, will run the second pipeline ...")
+            num_of_sentences = 0
+            for j, sentence in enumerate(docs.sents):
+                num_of_sentences += 1
+            print(f"\tExtracted {num_of_sentences} sentences. Processing each sentence one by one to check for presence of right pair of named entity types; if so, will run the second pipeline ...")
             sen_counter = 0
             rel_counter = 0
             extracted = 0
-            for j, sentence in enumerate(docs):
-                if(j % 5 == 0):
-                    print(f"          Processed {j+1} / {num_of_sentences} sentences")
-                if model == "'-spanbert":
-                    res, n = module_spanbert.spanbert_process(target_relations, t, r, sentence)
+            for j, sentence in enumerate(docs.sents):
+                if(j!= 0 and j % 5 == 0):
+                    print(f"\tProcessed {j} / {num_of_sentences} sentences")
+                if model == "-spanbert":
+                    res, n = module_spanbert.spanbert_process(spanbert, t, r, sentence)
+                    print("Dict res", res)
                     extracted = len(res)
                     if n != 0:
                         sen_counter += 1
                         rel_counter += n
-            print(f"Extracted annotations for  {sen_counter}  out of total  {num_of_sentences}  sentences")
-            print(f"Relations extracted from this website: {extracted} (Overall: {rel_counter}")
+                else:
+                    print("Gemini")
+                    all_relations = set()
+                    if len(all_relations) < k:  # Only process new relations if below k
+                    # print(f"\tProcessing sentence: {sentence}")
+                        prompt_text = get_prompt_text(r, sentence)
+                        response_text = get_gemini_completion(prompt_text, gemini_api_key)
+                        # print(response_text)
 
+                        # Accumulate only if new and unique and going up to k relations(would need to clarify)
+                        if "Subject" in response_text and "Object" in response_text and response_text.strip() not in all_relations:
+                            if check_string_regex(response_text.strip()):
+                                print(f"\t=== Extracted Relation ===")
+                                print(f"\tSentence: {sentence}")
+                                print(f"\tExtraction: {response_text.strip()}")
+                                print("\t==========\n")
+                                all_relations.add(response_text.strip())
+                        else:
+                            print(f"\tNo valid relation extracted from this sentence or duplicate found.\n")
+
+            print(f"Extracted annotations for  {sen_counter}  out of total  {num_of_sentences}  sentences")
+            print(f"Relations extracted from this website: {extracted} (Overall: {rel_counter})")
+            print(f"\n================== ALL RELATIONS for relation type {r} ( {len(all_relations)} ) =================")
+        for relation in all_relations:
+            print(relation)
         iteration += 1
         break
 
