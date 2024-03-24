@@ -3,8 +3,6 @@ from spanbert import SpanBERT
 from spacy_help_functions import get_entities, create_entity_pairs
 from collections import defaultdict
 
-# email Lara
-# difference in libraries in versions
 
 entities_of_interest = ["ORGANIZATION", "PERSON", "LOCATION", "CITY", "STATE_OR_PROVINCE", "COUNTRY"]
 predicates = {
@@ -13,10 +11,9 @@ predicates = {
     3: "per:cities_of_residence",
     4: "org:top_members/employees"
 }
-def spanbert_process(model, t, r, sentence):
+def spanbert_process(model, t, r, sentence, res):
     candidate_pairs = []
     sentence_entity_pairs = create_entity_pairs(sentence, entities_of_interest)
-    res = defaultdict(int)
     for ep in sentence_entity_pairs:
         if r==1 or r==2:
           if ep[1][1] == 'PERSON' and ep[2][1] == 'ORGANIZATION':
@@ -34,14 +31,18 @@ def spanbert_process(model, t, r, sentence):
           if ep[2][1] == 'ORGANIZATION' and ep[1][1] == 'PERSON':
             candidate_pairs.append({"tokens": ep[0], "subj": ep[2], "obj": ep[1]})  # e1=Subject, e2=Object
     if len(candidate_pairs) == 0:
-       return res, 0
+       return 0, 0, 0
     preds = model.predict(candidate_pairs)
-    counter = 0
+    sen_counter = 0
+    rel_counter = 0
+    extracted = 0
     for ex, pred in list(zip(candidate_pairs, preds)):
             relation = pred[0]
             if relation == 'no_relation' or relation != predicates[r]:
                 continue
-            counter += 1
+            rel_counter += 1
+            if sen_counter == 0:
+              sen_counter += 1
             print("\n\t\t=== Extracted Relation ===")
             print("\t\tInput tokens: {}".format(ex['tokens']))
             subj = ex["subj"][0]
@@ -51,10 +52,11 @@ def spanbert_process(model, t, r, sentence):
             if confidence > t:
                 if res[(subj, relation, obj)] < confidence:
                     res[(subj, relation, obj)] = confidence
+                    extracted += 1
                     print("\t\tAdding to set of extracted relations")
                 else:
                     print("\t\tDuplicate with lower confidence than existing record. Ignoring this.")
             else:
                 print("\t\tConfidence is lower than threshold confidence. Ignoring this.")
             print("\t\t==========")
-    return res, counter
+    return sen_counter, rel_counter, extracted

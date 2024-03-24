@@ -1,58 +1,27 @@
-import pprint
-from string import punctuation
-from sklearn.feature_extraction.text import TfidfVectorizer
-import pandas as pd
 from bs4 import BeautifulSoup
 import spacy
 from spanbert import SpanBERT
 from googleapiclient.discovery import build
 import sys
 import requests
-import google.generativeai as genai 
 import module_spanbert as module_spanbert
+import module_gemini as module_gemini
+from collections import defaultdict
 import re
 
+predicates = {
+    1: "Schools_Attended",
+    2: "Work_For",
+    3: "Live_In",
+    4: "Top_Member_Employees"
+}
 
-def check_string_regex(s):
-    # Pattern to match any of the specified words
-    pattern = r'none|not specified|N\/A'
-    # Search the string for any match
-    return not re.search(pattern, s, re.IGNORECASE)
-
-def get_prompt_text(relation_type, sentence):
-    # Relation types to specific prompt formats, one can use 1,2,3,4
-    # TODO: We may need to get this more refined
-    prompts = {
-        1: f"Given a sentence, extract all names of persons (subjects) and schools attended (objects). Extract only when subject and object are there. Don't extract pronouns unless it's declared in sentence. [Subject: PERSON'S NAME, Object: ORGANIZATION]\nSentence: {sentence}",
-        2: f"Given a sentence, extract all names of persons (subjects) and organizations they work for (objects). Extract only when subject and object are there. Output: [Subject: PERSON'S NAME, Object: ORGANIZATION]\nSentence: {sentence}",
-        3: f"Given a sentence, extract all names of persons (subjects) and their living locations (objects). Extract only when subject and object are there. Output: [Subject: PERSON'S NAME, Object: LOCATION]\nSentence: {sentence}",
-        4: f"Given a sentence, extract all organizations (subjects) and top member employees (objects). Extract only when subject and object are there. Output: [Subject: ORGANIZATION, Object: PERSON'S NAME]\nSentence: {sentence}"
-    }
-    return prompts.get(relation_type, "Invalid relation type.")
-
-# Function to get content generation from the Gemini API
-def get_gemini_completion(prompt_text, api_key, model_name='gemini-pro', max_tokens=100, temperature=0.2, top_p=1, top_k=32):
-    # print("\tProcessing sentence for extraction ...")
-    # Configure Gemini API with the provided API key
-    genai.configure(api_key=api_key)
-    
-    # Initialize Gemini model
-    model = genai.GenerativeModel(model_name)
-    # Set up configuration with parameters by following reference
-    generation_config = genai.types.GenerationConfig(
-        max_output_tokens=max_tokens,
-        temperature=temperature,
-        top_p=top_p,
-        top_k=top_k
-    )
-    
-    try:
-        # Create response based on the prompt text and configuration
-        response = model.generate_content(prompt_text, generation_config=generation_config)
-        return response.text
-    except Exception as e:
-        print(f"\tError during Gemini completion: {str(e)}")
-        return ""
+predicates_bert = {
+    1: "per:schools_attended",
+    2: "per:employee_of",
+    3: "per:cities_of_residence",
+    4: "org:top_members/employees"
+}
 
 def spacy_process(raw_text):
     print("\tAnnotating the webpage using spacy...")
@@ -71,13 +40,13 @@ def get_documents(service, query, cx):
     )
   documents = []
   for i in res['items']:
-    documents.append(i['formattedUrl'])
+    documents.append(i['link'])
   return documents
 
 def get_plain_text(url):
     # Send a GET request to the URL
     print("\tFetching text from url ...")
-    response = requests.get(url)
+    response = requests.get(url, timeout=5)
 
     # Check if the request was successful (status code 200)
     if response.status_code == 200:
@@ -148,7 +117,7 @@ def main():
     print(f"Engine key\t= {cse_id}")
     print(f"Gemini key\t= {gemini_api_key}")
     print(f"Method\t\t= {model}")
-    print(f"Relation\t= {r}")
+    print(f"Relation\t= {predicates[r]}")
     print(f"Threshold\t= {t}")
     print(f"Query\t\t= {q}")
     print(f"# of Tuples\t= {k}")
@@ -157,18 +126,21 @@ def main():
     service = build(
         "customsearch", "v1", developerKey=api_key
     )
-    # currently doing for spanbert
-    iteration = 0
-    while True:
+    iteration = 1
+    res = defaultdict(int)
+    all_relations = set()
+    used_q = {q: True}
+    while len(res) < k and len(all_relations) < k:
         items = get_documents(service, q, cse_id)
         if not items:
             print("No results found.")
             sys.exit(1)
             continue
-        print(f"=========== Iteration: {iteration+1} - Query: {q} ===========\n")
-        target_relations = {}
-        spanbert = SpanBERT("./pretrained_spanbert")
+        print(f"=========== Iteration: {iteration} - Query: {q} ===========\n")
+        if model == "-spanbert":
+            spanbert = SpanBERT("./pretrained_spanbert")
         for i, url in enumerate(items):
+            print("LEN RES:", len(res))
             print(f"URL ( {i+1} / 10): {url}")
             raw_text = get_plain_text(url)
             if raw_text == None:
@@ -182,43 +154,80 @@ def main():
             sen_counter = 0
             rel_counter = 0
             extracted = 0
+            
             for j, sentence in enumerate(docs.sents):
-                if(j!= 0 and j % 5 == 0):
+                if(j != 0 and j % 5 == 0):
                     print(f"\tProcessed {j} / {num_of_sentences} sentences")
                 if model == "-spanbert":
-                    res, n = module_spanbert.spanbert_process(spanbert, t, r, sentence)
-                    print("Dict res", res)
-                    extracted = len(res)
-                    if n != 0:
-                        sen_counter += 1
-                        rel_counter += n
+                    sc, rc, ec = module_spanbert.spanbert_process(spanbert, t, r, sentence, res)
+                    sen_counter += sc
+                    rel_counter += rc
+                    extracted += ec
                 else:
-                    print("Gemini")
-                    all_relations = set()
-                    if len(all_relations) < k:  # Only process new relations if below k
-                    # print(f"\tProcessing sentence: {sentence}")
-                        prompt_text = get_prompt_text(r, sentence)
-                        response_text = get_gemini_completion(prompt_text, gemini_api_key)
-                        # print(response_text)
-
-                        # Accumulate only if new and unique and going up to k relations(would need to clarify)
-                        if "Subject" in response_text and "Object" in response_text and response_text.strip() not in all_relations:
-                            if check_string_regex(response_text.strip()):
-                                print(f"\t=== Extracted Relation ===")
-                                print(f"\tSentence: {sentence}")
-                                print(f"\tExtraction: {response_text.strip()}")
-                                print("\t==========\n")
-                                all_relations.add(response_text.strip())
-                        else:
-                            print(f"\tNo valid relation extracted from this sentence or duplicate found.\n")
+                    prompt_text = module_gemini.get_prompt_text(q, r, sentence)
+                    response_text = module_gemini.get_gemini_completion(prompt_text, gemini_api_key)
+                    if "Subject" in response_text and "Object" in response_text and response_text.strip() not in all_relations:
+                        response_text_lines = response_text.strip().split("\n")
+                        sen_counter += 1
+                        for line in response_text_lines:
+                        # Check if both "Subject" and "Object" are present in the line
+                            if "Subject" in line and "Object" in line:
+                                # If the line meets the criteria and it's not already in the list of all relations
+                                # Assuming all_relations is a list of strings, each representing a previously processed relation
+                                if line not in all_relations:
+                                    # Add the line to the list of extracted relations
+                                    if module_gemini.check_string_regex(line.strip()):
+                                        print(f"\t=== Extracted Relation ===")
+                                        print(f"\tSentence: {sentence}")
+                                        print(f"\tExtraction: {line.strip()}")
+                                        print("\t==========\n")
+                                        extracted += 1
+                                        rel_counter += 1
+                                        all_relations.add(line.strip())
+                        
+                    # else:
+                    #     print(f"\tNo valid relation extracted from this sentence or duplicate found.\n")
 
             print(f"Extracted annotations for  {sen_counter}  out of total  {num_of_sentences}  sentences")
             print(f"Relations extracted from this website: {extracted} (Overall: {rel_counter})")
-            print(f"\n================== ALL RELATIONS for relation type {r} ( {len(all_relations)} ) =================")
-        for relation in all_relations:
-            print(relation)
+        
+        if model == "-spanbert":
+            sorted_items = sorted(res.items(), key=lambda x: x[1], reverse=True)
+            for key, value in sorted_items:
+                new_q = key[0] + " " + key[2]
+                if new_q in used_q:
+                    continue
+                else:
+                    used_q[new_q] = True
+                    q = new_q
+                    break
+        else:
+            for relation in all_relations:
+                matches = re.findall(r'(?:subject|object):\s*(.*?)(?:\s*;|$)', relation, re.IGNORECASE)
+                # Join the extracted strings into a new string
+                new_str = ' '.join(matches)
+                if new_str in used_q:
+                    continue
+                else:
+                    used_q[new_str] = True
+                    q = new_str
+                    break
         iteration += 1
-        break
+    if model == '-spanbert':
+        print(f"================== ALL RELATIONS for {predicates_bert[r]} ( {k} ) =================")
+        sorted_items = sorted(res.items(), key=lambda x: x[1], reverse=True)
+        num = 0
+        for key, value in sorted_items:
+            if num == k:
+                break
+            print(f"Confidence: {value} 		| Subject: {key[0]} 		| Object: {key[2]}")
+            num += 1
+        
+    else:
+        print(f"================== ALL RELATIONS for {predicates[r]} ( {len(all_relations)} ) =================")
+        for rel in all_relations:
+            print(rel)
+    print(f"Total # of iterations = {iteration-1}")
 
 if __name__ == "__main__":
     main()
