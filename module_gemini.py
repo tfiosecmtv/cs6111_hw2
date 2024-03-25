@@ -51,10 +51,6 @@ def get_prompt_text(q, relation_type, sentence):
     f"Format each relationship found in the sentence as follows: Subject: [PERSON'S NAME] | Object: [ORGANIZATION]\nSentence: {sentence}",
         2: f"Prompt: Analyze the given sentence to identify and extract all instances that clearly indicate an employment "
     f"relationship, focusing on where a person's name (subject) is associated with an organization (object) they work for. "
-    f"Clarify that subjects should be identifiable human names, avoiding any confusion with companies, subsidiaries, "
-    f"or other non-individual entities. Objects should be legitimate organizations, recognizable through keywords "
-    f"such as Corporation, Company, Foundation, or Inc. Exclude pronouns and ensure clarity in distinguishing between "
-    f"subjects and objects.\n\n"
     f"For each relationship found, format as follows: "
     f"Subject: [PERSON'S NAME] | Object: [ORGANIZATION]\n"
     f"Ensure that the subject refers exclusively to individuals and the object to the organizations they work for.\n"
@@ -73,27 +69,18 @@ def get_prompt_text(q, relation_type, sentence):
     f"Sentence: {sentence}",
     4: f"""
 Extract company-key figure relationships from sentences. Identify when a company (subject) and a top member employee or key figure (object) are mentioned together. 
-
-Criteria:
 1. Subjects are legitimate companies or organizations, excluding educational institutions and non-corporate entities.
 2. Objects are individuals in significant roles (e.g., executives, founders).
 3. Exclude references without specific names, notable roles, or that are ambiguous.
 4. Format: "Subject: [COMPANY NAME] | Object: [INDIVIDUAL NAME]".
-
-Example: Given "Jeff Bezos, the founder of Amazon, introduced new policies," the output should be "Subject: Amazon | Object: Jeff Bezos".
-
-Implementation should validate:
-- The subject as a valid company or organization.
-- The object as a notable individual associated with the subject.
-
-Avoid false positives and ensure clear association between subject and object. Given sentence: {sentence}
+Given sentence: {sentence}
 """
     }
     #We retrieve and return the relation 
     return prompts.get(relation_type, "Invalid relation type.")
 
 # Function to get content generation from the Gemini API
-def get_gemini_completion(prompt_text, api_key, model_name='gemini-pro', max_tokens=100, temperature=0.1, top_p=1, top_k=32):
+def get_gemini_completion(prompt_text, api_key, model_name='gemini-pro', max_tokens=100, temperature=0.5, top_p=1, top_k=32):
     # print("\tProcessing sentence for extraction ...")
     # Configure Gemini API with the provided API key
     genai.configure(api_key=api_key)
