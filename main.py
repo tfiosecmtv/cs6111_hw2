@@ -172,6 +172,8 @@ def main():
                     rel_counter += rc
                     extracted += ec
                 else:
+                    if not module_gemini.make_call_to_api(sentence, r):
+                        continue
                     prompt_text = module_gemini.get_prompt_text(q, r, sentence)
                     response_text = module_gemini.get_gemini_completion(prompt_text, gemini_api_key)
                     if "Subject" in response_text and "Object" in response_text and response_text.strip() not in all_relations:
@@ -203,7 +205,7 @@ def main():
 
             print(f"Extracted annotations for  {sen_counter}  out of total  {num_of_sentences}  sentences")
             print(f"Relations extracted from this website: {extracted} (Overall: {rel_counter})")
-        
+        prev_q = q
         if model == "-spanbert":
             sorted_items = sorted(res.items(), key=lambda x: x[1], reverse=True)
             for key, value in sorted_items:
@@ -229,6 +231,9 @@ def main():
                     used_q[new_str] = True
                     q = new_str
                     break
+        if q == prev_q:
+            print("No new tuple found.")
+            sys.exit(1)
         iteration += 1
         if model == '-spanbert':
             print(f"================== ALL RELATIONS for {predicates_bert[r]} ( {len(res)} ) =================")

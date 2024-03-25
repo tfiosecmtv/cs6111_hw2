@@ -15,6 +15,7 @@ def spanbert_process(model, t, r, sentence, res):
     candidate_pairs = []
     sentence_entity_pairs = create_entity_pairs(sentence, entities_of_interest)
     for ep in sentence_entity_pairs:
+        # To minimize the use, use subject-object tuples with the relevant entities depending on r
         if r==1 or r==2:
           if ep[1][1] == 'PERSON' and ep[2][1] == 'ORGANIZATION':
             candidate_pairs.append({"tokens": ep[0], "subj": ep[1], "obj": ep[2]})  # e1=Subject, e2=Object

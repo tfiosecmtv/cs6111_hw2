@@ -1,6 +1,31 @@
 import re
 import google.generativeai as genai 
+from spacy_help_functions import get_entities, create_entity_pairs
 
+
+entities_of_interest = ["ORGANIZATION", "PERSON", "LOCATION", "CITY", "STATE_OR_PROVINCE", "COUNTRY"]
+
+
+def make_call_to_api(sentence, r):
+    sentence_entity_pairs = create_entity_pairs(sentence, entities_of_interest)
+    for ep in sentence_entity_pairs:
+        # To minimize the use, use subject-object tuples with the relevant entities depending on r
+        if r==1 or r==2:
+          if ep[1][1] == 'PERSON' and ep[2][1] == 'ORGANIZATION':
+            return True # e1=Subject, e2=Object
+          if ep[2][1] == 'PERSON' and ep[1][1] == 'ORGANIZATION':
+            return True  # e1=Subject, e2=Object
+        elif r==3:
+          if ep[1][1] == 'PERSON' and (ep[2][1] == 'LOCATION' or ep[2][1] == 'CITY' or ep[2][1] == 'STATE_OR_PROVINCE' or ep[2][1] == 'COUNTRY'):
+            return True  # e1=Subject, e2=Object
+          if ep[2][1] == 'PERSON' and (ep[1][1] == 'LOCATION' or ep[1][1] == 'CITY' or ep[1][1] == 'STATE_OR_PROVINCE' or ep[1][1] == 'COUNTRY'):
+            return True  # e1=Subject, e2=Object
+        elif r==4:
+          if ep[1][1] == 'ORGANIZATION' and ep[2][1] == 'PERSON':
+            return True  # e1=Subject, e2=Object
+          if ep[2][1] == 'ORGANIZATION' and ep[1][1] == 'PERSON':
+            return True  # e1=Subject, e2=Object
+    return False
 
 def check_string_regex(s):
     # Pattern to match any of the specified words
