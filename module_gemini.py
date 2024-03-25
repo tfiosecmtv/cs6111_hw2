@@ -35,7 +35,23 @@ def get_prompt_text(q, relation_type, sentence):
     "Ensure that the subject refers exclusively to individuals and the object to the geographic "
     "locations where they live.\n"
     f"Sentence: {sentence}",
-        4:  f"Given the sentence, extract all instances where a company's name (subjects) and top member employees or key figures (objects) are mentioned together. Exclude general references to employees without specific names or notable roles. Ensure the subject represents a legitimate company or organization, and the object refers to an individual associated with a significant role within the company. Avoid including educational institutions or non-corporate entities as subjects. For each identified relationship: Ensure the subject is a valid company or organization, identifiable by its presence in reliable sources or known business sectors. Confirm the object is a notable individual associated with the company, such as executives, founders. Exclude pronouns and ambiguous references, focusing on clear mentions of both the company and the individual’s name. Format each relationship found in the sentence as follows:  Subject: [COMPANY'S NAME] | Object: [INDIVIDUAL'S NAME]\nSentence: {sentence}"
+    4: f"""
+Extract company-key figure relationships from sentences. Identify when a company (subject) and a top member employee or key figure (object) are mentioned together. 
+
+Criteria:
+1. Subjects are legitimate companies or organizations, excluding educational institutions and non-corporate entities.
+2. Objects are individuals in significant roles (e.g., executives, founders).
+3. Exclude references without specific names, notable roles, or that are ambiguous.
+4. Format: "Subject: [COMPANY NAME] | Object: [INDIVIDUAL NAME]".
+
+Example: Given "Jeff Bezos, the founder of Amazon, introduced new policies," the output should be "Subject: Amazon | Object: Jeff Bezos".
+
+Implementation should validate:
+- The subject as a valid company or organization.
+- The object as a notable individual associated with the subject.
+
+Avoid false positives and ensure clear association between subject and object. Given sentence: {sentence}
+"""
     }
     return prompts.get(relation_type, "Invalid relation type.")
 

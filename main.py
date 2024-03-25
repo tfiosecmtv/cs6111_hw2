@@ -188,6 +188,12 @@ def main():
                                         extracted += 1
                                         rel_counter += 1
                                         all_relations.add(line.strip())
+                                else:
+                                    print(f"\t=== Extracted Relation ===")
+                                    print(f"\tSentence: {sentence}")
+                                    print(f"\tExtraction: {line.strip()}")
+                                    print("\tDuplicate. Ignoring this.")
+                                    print("\t==========\n")
                         
                     # else:
                     #     print(f"\tNo valid relation extracted from this sentence or duplicate found.\n")
