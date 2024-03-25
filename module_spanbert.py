@@ -1,6 +1,6 @@
 import spacy
-from SpanBERT.spanbert import SpanBERT
-from SpanBERT.spacy_help_functions import get_entities, create_entity_pairs
+from spanbert import SpanBERT
+from spacy_help_functions import get_entities, create_entity_pairs
 from collections import defaultdict
 
 

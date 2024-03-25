@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 import spacy
-from SpanBERT.spanbert import SpanBERT
+from spanbert import SpanBERT
 from googleapiclient.discovery import build
 import sys
 import requests
@@ -54,9 +54,13 @@ def get_plain_text(url):
         soup = BeautifulSoup(response.content, 'html.parser')
 
         # Extract the plain text from the parsed HTML
-        # plain_text = soup.get_text(strip=True)
-        text = ' '.join(soup.stripped_strings)
-        plain_text = ' '.join(text.split())
+        plain_text = soup.get_text()
+        plain_text = plain_text.replace("\n", " ")
+
+# Add whitespace after every period not followed by a whitespace
+        #plain_text = plain_text.replace(".", ".  ")
+        #text = ' '.join(soup.stripped_strings)
+        #plain_text = ' '.join(text.split())
         # Truncate the text to its first 10,000 characters if it exceeds that length
         if len(plain_text) > 10000:
             plain_text = plain_text[:10000]
@@ -188,13 +192,12 @@ def main():
                                         extracted += 1
                                         rel_counter += 1
                                         all_relations.add(line.strip())
-                                else:
+                            else:
                                     print(f"\t=== Extracted Relation ===")
                                     print(f"\tSentence: {sentence}")
                                     print(f"\tExtraction: {line.strip()}")
                                     print("\tDuplicate. Ignoring this.")
                                     print("\t==========\n")
-                        
                     # else:
                     #     print(f"\tNo valid relation extracted from this sentence or duplicate found.\n")
 
@@ -228,12 +231,12 @@ def main():
                     break
         iteration += 1
         if model == '-spanbert':
-            print(f"================== ALL RELATIONS for {predicates_bert[r]} ( {k} ) =================")
+            print(f"================== ALL RELATIONS for {predicates_bert[r]} ( {len(res)} ) =================")
             sorted_items = sorted(res.items(), key=lambda x: x[1], reverse=True)
             num = 0
             for key, value in sorted_items:
                 if num == k:
-                    break
+                   print("Target number of k tuples achieved.")
                 print(f"Confidence: {value} 		| Subject: {key[0]} 		| Object: {key[2]}")
                 num += 1
             
