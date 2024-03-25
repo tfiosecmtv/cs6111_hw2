@@ -48,28 +48,35 @@ def get_documents(service, query, cx):
   return documents
 
 def get_plain_text(url):
-    # Send a GET request to the URL
-    print("\tFetching text from url ...")
-    response = requests.get(url, timeout=5)
+    try:
+        # Send a GET request to the URL
+        print("\tFetching text from url ...")
+        response = requests.get(url, timeout=5)
 
-    # Check if the request was successful (status code 200)
-    if response.status_code == 200:
+        # Check if the request was successful (status code 200)
+        if response.status_code == 200:
         # Parse the HTML content using BeautifulSoup
-        soup = BeautifulSoup(response.content, 'html.parser')
-
+            soup = BeautifulSoup(response.content, 'html.parser')
         # Extract the plain text from the parsed HTML
-        plain_text = soup.get_text()
-        plain_text = plain_text.replace("\n", " ")
+            plain_text = soup.get_text().replace("\n", " ").strip()
+            if len(plain_text) > 10000:
+                plain_text = plain_text[:10000]
+            return plain_text
+        else:
+            # If the request was not successful, print an error message
+            print(f"Error: Unable to retrieve content from {url}. Status code: {response.status_code}")
+    # If the request was not successful, print the exception
+    except requests.exceptions.Timeout:
+        print(f"Timeout error for {url}. Skipping...")
+    # If the request was not successful, print the exception
+    except requests.exceptions.SSLError:
+        print(f"SSL error for {url}. Skipping...")
+    # If the request was not successful, print the exception
+    except requests.exceptions.RequestException as e:
+        print(f"Request exception for {url}: {e}. Skipping...")
+    # In any error case, return None to signal the calling function to skip this URL
+    return None
 
-        # Truncate the text to its first 10,000 characters if it exceeds that length
-        if len(plain_text) > 10000:
-            plain_text = plain_text[:10000]
-
-        return plain_text
-    else:
-        # If the request was not successful, print an error message
-        print(f"Error: Unable to retrieve content from {url}. Status code: {response.status_code}")
-        return None
 
 # Input validation methods
 
@@ -115,6 +122,7 @@ def main():
     if not is_positive_integer(k):
         sys.exit("<k> must be a positive integer.")
 
+    #Listing the needed parameters here
     print('____')
     print(f"Parameters:")
     print(f"Client key\t= {api_key}")
@@ -127,6 +135,7 @@ def main():
     print(f"# of Tuples\t= {k}")
     print(f"Loading necessary libraries; This should take a minute or so ...")
 
+    #Using the service for custom search
     service = build(
         "customsearch", "v1", developerKey=api_key
     )
@@ -143,9 +152,11 @@ def main():
     while len(res) < k and len(all_relations) < k:
         items = get_documents(service, q, cse_id)
         if not items:
+            #If no items found, no results
             print("No results found.")
             sys.exit(1)
             continue
+        #Iteration code to match transcript
         print(f"=========== Iteration: {iteration} - Query: {q} ===========\n")
         if model == "-spanbert":
             spanbert = SpanBERT("./pretrained_spanbert")
@@ -158,21 +169,27 @@ def main():
             # No extraction happened
             if raw_text == None:
                 continue
+            #Print webpage length
             print(f"\tWebpage length (num characters): {len(raw_text)}")
             docs = spacy_process(raw_text)
+            #Declare num sentences to 0
             num_of_sentences = 0
             for j, sentence in enumerate(docs.sents):
                 num_of_sentences += 1
+            #Matching the print statement for reference project
             print(f"\tExtracted {num_of_sentences} sentences. Processing each sentence one by one to check for presence of right pair of named entity types; if so, will run the second pipeline ...")
             
             # Counters for the extraction print for each URL
             sen_counter = 0
             rel_counter = 0
             extracted = 0
-            
+            #We do a for loop with j and sentence for doc sets here
             for j, sentence in enumerate(docs.sents):
                 if(j != 0 and j % 5 == 0):
                     print(f"\tProcessed {j} / {num_of_sentences} sentences")
+                if iteration > 1 and len(all_relations) >= k:
+                    break
+                #If model is spanbert, proceed with following process
                 if model == "-spanbert":
                     sc, rc, ec = module_spanbert.spanbert_process(spanbert, t, r, sentence, res)
                     sen_counter += sc
@@ -191,6 +208,7 @@ def main():
                     if "Subject" in response_text and "Object" in response_text and response_text.strip() not in all_relations:
                         response_text_lines = response_text.strip().split("\n")
                         sen_counter += 1
+                        #For line in response text lines, we do the following
                         for line in response_text_lines:
                         # Check if both "Subject" and "Object" are present in the line
                             if "Subject" in line and "Object" in line:
@@ -207,12 +225,13 @@ def main():
                                         rel_counter += 1
                                         all_relations.add(line.strip())
                             else:
+                                    # Printing statements for extracted relation when duplicate
                                     print(f"\t=== Extracted Relation ===")
                                     print(f"\tSentence: {sentence}")
                                     print(f"\tExtraction: {line.strip()}")
                                     print("\tDuplicate. Ignoring this.")
                                     print("\t==========\n")
-
+            #Extracting annotations with counter and out of num of sentences
             print(f"Extracted annotations for  {sen_counter}  out of total  {num_of_sentences}  sentences")
             print(f"Relations extracted from this website: {extracted} (Overall: {rel_counter})")
         # Track the previous query to check if the new query is the same.
@@ -232,6 +251,7 @@ def main():
                     q = new_q
                     break
         else:
+            #We do a for loop for relation for all relations
             for relation in all_relations:
                 parts = relation.split(" | ")
                 # Extract the 'Subject' part and split by ': '
@@ -248,20 +268,25 @@ def main():
                     q = new_str
                     break
         if q == prev_q:
+            #No tuples are found
             print("No new tuple found.")
             sys.exit(1)
         iteration += 1
+        #We check if model is spanbert
         if model == '-spanbert':
             print(f"================== ALL RELATIONS for {predicates_bert[r]} ( {len(res)} ) =================")
             sorted_items = sorted(res.items(), key=lambda x: x[1], reverse=True)
             num = 0
+            #Do a for loop for sorting
             for key, value in sorted_items:
+                #If target number of k tiples is reached
                 if num == k:
                    print("Target number of k tuples achieved.")
                 print(f"Confidence: {value} 		| Subject: {key[0]} 		| Object: {key[2]}")
                 num += 1
             
         else:
+            #If else, we print all relations
             print(f"================== ALL RELATIONS for {predicates[r]} ( {len(all_relations)} ) =================")
             for rel in all_relations:
                 print(rel)
