@@ -4,7 +4,7 @@ import google.generativeai as genai
 
 def check_string_regex(s):
     # Pattern to match any of the specified words
-    pattern = r'none|not specified|N\/A|Not Available|null|NULL|Not Applicable|NA|Not Provided|Subject: ,|Object: ,|Object: ]|PERSON\'S NAME|ORGANIZATION|LOCATION|CITY|STATE_OR_PROVINCE|COUNTRY|he|she|NOT FOUND'
+    pattern = r'none|not specified|N\/A|Not Available|null|NULL|Not Mentioned|Not Applicable|NA|Not Provided|Subject: ,|Object: ,|Object: ]|PERSON\'S NAME|ORGANIZATION|LOCATION|CITY|STATE_OR_PROVINCE|COUNTRY|he|she|NOT FOUND|Subject: \|'
     # Search the string for any match
     return not re.search(pattern, s, re.IGNORECASE)
 
