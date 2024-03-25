@@ -4,7 +4,7 @@ import google.generativeai as genai
 
 def check_string_regex(s):
     # Pattern to match any of the specified words
-    pattern = r'none|not specified|N\/A|Not Available|null|NULL|Not Applicable|NA|Not Provided|Subject: ,|Object: ,|Object: ]|Subject: PERSON\'S NAME|Object: ORGANIZATION|Subject: ORGANIZATION|Object: PERSON\'S NAME|Object: one of LOCATION, CITY, STATE_OR_PROVINCE, or COUNTRY|he|she'
+    pattern = r'none|not specified|N\/A|Not Available|null|NULL|Not Applicable|NA|Not Provided|Subject: ,|Object: ,|Object: ]|PERSON\'S NAME|ORGANIZATION|LOCATION|CITY|STATE_OR_PROVINCE|COUNTRY|he|she|NOT FOUND'
     # Search the string for any match
     return not re.search(pattern, s, re.IGNORECASE)
 
@@ -12,15 +12,35 @@ def get_prompt_text(q, relation_type, sentence):
     # Relation types to specific prompt formats, one can use 1,2,3,4
     # TODO: We may need to get this more refined
     prompts = {
-        1: f"Prompt: Given the sentence, extract all instances where person's name (subjects) and educational institutions (objects) are mentioned together. Try to remove pronouns like he/she and ensure person’s name is human name. For each identified relationship: Ensure the subject is a person's name and confirm the object is a legitimate educational institution, identifiable by keywords such University, College, School, or Academy. Format each relationship found in the sentence as follows: Subject: [PERSON'S NAME] | Object: [ORGANIZATION]\nSentence: {sentence}",
-        2: f"Given a sentence, extract all names of persons (subjects) and organizations they work for (objects). Extract only when subject and object are there. Give output as this format: [Subject: PERSON'S NAME, Object: ORGANIZATION]\nSentence: {sentence}",
-        3: f"Given a sentence, extract all names of persons (subjects) and their living locations (objects). Don't extract pronouns unless it's declared in sentence. Extract only when subject and object are there.  Give output as this format: [Subject: PERSON'S NAME, Object: one of LOCATION, CITY, STATE_OR_PROVINCE, or COUNTRY]\nSentence: {sentence}",
-        4: f"Given a sentence, extract all organizations (subjects) and top member employees (objects). Don't extract pronouns unless it's declared in sentence. Extract only when subject and object are there.  Give output as this format: [Subject: ORGANIZATION, Object: PERSON'S NAME]\nSentence: {sentence}"
+        1: f"Given the sentence, extract all instances where person's name (subjects) and educational institutions (objects) are mentioned together. Try to remove pronouns like he/she and ensure person’s name is human name. For each identified relationship: Ensure the subject is a person's name and confirm the object is a legitimate educational institution, identifiable by keywords such University, College, School, or Academy. Format each relationship found in the sentence as follows: Subject: [PERSON'S NAME] | Object: [ORGANIZATION]\nSentence: {sentence}",
+        2: f"Prompt: Analyze the given sentence to identify and extract all instances that clearly indicate an employment "
+    f"relationship, focusing on where a person's name (subject) is associated with an organization (object) they work for. "
+    f"Clarify that subjects should be identifiable human names, avoiding any confusion with companies, subsidiaries, "
+    f"or other non-individual entities. Objects should be legitimate organizations, recognizable through keywords "
+    f"such as Corporation, Company, Foundation, or Inc. Exclude pronouns and ensure clarity in distinguishing between "
+    f"subjects and objects.\n\n"
+    f"For each relationship found, format as follows: "
+    f"Subject: [PERSON'S NAME] | Object: [ORGANIZATION]\n"
+    f"Ensure that the subject refers exclusively to individuals and the object to the organizations they work for.\n"
+    f"Sentence: {sentence}",
+        3: f"Analyze the given sentence to identify and extract all instances that "
+    "clearly indicate a 'live-in' relationship, focusing on where a person's name (subject) "
+    "is associated with a geographic location (object) they live in. "
+    "Clarify that subjects should be identifiable human names, avoiding any confusion with "
+    "companies, subsidiaries, or other non-individual entities. Objects should be legitimate "
+    "geographic locations, recognizable through keywords such as city, state, country, or region. "
+    "Exclude pronouns and ensure clarity in distinguishing between subjects and objects.\n\n"
+    "For each relationship found, format as follows: "
+    "Subject: [PERSON'S NAME] | Object: [GEOGRAPHIC LOCATION]\n"
+    "Ensure that the subject refers exclusively to individuals and the object to the geographic "
+    "locations where they live.\n"
+    f"Sentence: {sentence}",
+        4:  f"Given the sentence, extract all instances where a company's name (subjects) and top member employees or key figures (objects) are mentioned together. Exclude general references to employees without specific names or notable roles. Ensure the subject represents a legitimate company or organization, and the object refers to an individual associated with a significant role within the company. Avoid including educational institutions or non-corporate entities as subjects. For each identified relationship: Ensure the subject is a valid company or organization, identifiable by its presence in reliable sources or known business sectors. Confirm the object is a notable individual associated with the company, such as executives, founders. Exclude pronouns and ambiguous references, focusing on clear mentions of both the company and the individual’s name. Format each relationship found in the sentence as follows:  Subject: [COMPANY'S NAME] | Object: [INDIVIDUAL'S NAME]\nSentence: {sentence}"
     }
     return prompts.get(relation_type, "Invalid relation type.")
 
 # Function to get content generation from the Gemini API
-def get_gemini_completion(prompt_text, api_key, model_name='gemini-pro', max_tokens=100, temperature=0.5, top_p=1, top_k=32):
+def get_gemini_completion(prompt_text, api_key, model_name='gemini-pro', max_tokens=100, temperature=0.1, top_p=1, top_k=32):
     # print("\tProcessing sentence for extraction ...")
     # Configure Gemini API with the provided API key
     genai.configure(api_key=api_key)
