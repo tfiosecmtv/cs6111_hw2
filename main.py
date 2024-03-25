@@ -1,11 +1,11 @@
 from bs4 import BeautifulSoup
 import spacy
-from spanbert import SpanBERT
+from SpanBERT.spanbert import SpanBERT
 from googleapiclient.discovery import build
 import sys
 import requests
-import SpanBERT.module_spanbert as module_spanbert
-import SpanBERT.module_gemini as module_gemini
+import module_spanbert as module_spanbert
+import module_gemini as module_gemini
 from collections import defaultdict
 import re
 
@@ -140,6 +140,8 @@ def main():
         if model == "-spanbert":
             spanbert = SpanBERT("./pretrained_spanbert")
         for i, url in enumerate(items):
+            if iteration > 1 and len(all_relations) >= k:
+                break
             print("LEN RES:", len(res))
             print(f"URL ( {i+1} / 10): {url}")
             raw_text = get_plain_text(url)
@@ -158,6 +160,8 @@ def main():
             for j, sentence in enumerate(docs.sents):
                 if(j != 0 and j % 5 == 0):
                     print(f"\tProcessed {j} / {num_of_sentences} sentences")
+                if iteration > 1 and len(all_relations) >= k:
+                    break
                 if model == "-spanbert":
                     sc, rc, ec = module_spanbert.spanbert_process(spanbert, t, r, sentence, res)
                     sen_counter += sc
@@ -203,9 +207,13 @@ def main():
                     break
         else:
             for relation in all_relations:
-                matches = re.findall(r'(?:subject|object):\s*(.*?)(?:\s*;|$)', relation, re.IGNORECASE)
+                parts = relation.split(" | ")
+                # Extract the 'Subject' part and split by ': '
+                subject_part = parts[0].split(": ")[1]
+                # Extract the 'Object' part and split by ': '
+                object_part = parts[1].split(": ")[1]
                 # Join the extracted strings into a new string
-                new_str = ' '.join(matches)
+                new_str = subject_part + " " + object_part
                 if new_str in used_q:
                     continue
                 else:
@@ -213,21 +221,21 @@ def main():
                     q = new_str
                     break
         iteration += 1
-    if model == '-spanbert':
-        print(f"================== ALL RELATIONS for {predicates_bert[r]} ( {k} ) =================")
-        sorted_items = sorted(res.items(), key=lambda x: x[1], reverse=True)
-        num = 0
-        for key, value in sorted_items:
-            if num == k:
-                break
-            print(f"Confidence: {value} 		| Subject: {key[0]} 		| Object: {key[2]}")
-            num += 1
-        
-    else:
-        print(f"================== ALL RELATIONS for {predicates[r]} ( {len(all_relations)} ) =================")
-        for rel in all_relations:
-            print(rel)
-    print(f"Total # of iterations = {iteration-1}")
+        if model == '-spanbert':
+            print(f"================== ALL RELATIONS for {predicates_bert[r]} ( {k} ) =================")
+            sorted_items = sorted(res.items(), key=lambda x: x[1], reverse=True)
+            num = 0
+            for key, value in sorted_items:
+                if num == k:
+                    break
+                print(f"Confidence: {value} 		| Subject: {key[0]} 		| Object: {key[2]}")
+                num += 1
+            
+        else:
+            print(f"================== ALL RELATIONS for {predicates[r]} ( {len(all_relations)} ) =================")
+            for rel in all_relations:
+                print(rel)
+        print(f"Total # of iterations = {iteration-1}")
 
 if __name__ == "__main__":
     main()
