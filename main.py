@@ -9,6 +9,7 @@ import module_gemini as module_gemini
 from collections import defaultdict
 import re
 
+# Predicate mapping to relation r
 predicates = {
     1: "Schools_Attended",
     2: "Work_For",
@@ -16,6 +17,7 @@ predicates = {
     4: "Top_Member_Employees"
 }
 
+# BERT model relation mapping to relation r
 predicates_bert = {
     1: "per:schools_attended",
     2: "per:employee_of",
@@ -29,6 +31,7 @@ def spacy_process(raw_text):
     doc = nlp(raw_text)
     return doc
 
+# Extract top 10 documents/urls for the given query
 def get_documents(service, query, cx):
   res = (
         service.cse()
@@ -40,6 +43,7 @@ def get_documents(service, query, cx):
     )
   documents = []
   for i in res['items']:
+    # Use 'link' key to get the full URL string
     documents.append(i['link'])
   return documents
 
@@ -57,10 +61,6 @@ def get_plain_text(url):
         plain_text = soup.get_text()
         plain_text = plain_text.replace("\n", " ")
 
-# Add whitespace after every period not followed by a whitespace
-        #plain_text = plain_text.replace(".", ".  ")
-        #text = ' '.join(soup.stripped_strings)
-        #plain_text = ' '.join(text.split())
         # Truncate the text to its first 10,000 characters if it exceeds that length
         if len(plain_text) > 10000:
             plain_text = plain_text[:10000]
@@ -131,9 +131,15 @@ def main():
         "customsearch", "v1", developerKey=api_key
     )
     iteration = 1
+    # Use dictionary if model is SpanBERT to track the tuples with their confidence
     res = defaultdict(int)
+    # Use set if model is Gemini to get rid of duplicates
     all_relations = set()
+
+    # To track the used queries for new iterations
     used_q = {q: True}
+
+    # Keep continuing until we get k tuples
     while len(res) < k and len(all_relations) < k:
         items = get_documents(service, q, cse_id)
         if not items:
@@ -144,11 +150,12 @@ def main():
         if model == "-spanbert":
             spanbert = SpanBERT("./pretrained_spanbert")
         for i, url in enumerate(items):
+            # The gemini transcript does not iterate through all URLs if iteration is greater than 1
             if iteration > 1 and len(all_relations) >= k:
                 break
-            print("LEN RES:", len(res))
             print(f"URL ( {i+1} / 10): {url}")
             raw_text = get_plain_text(url)
+            # No extraction happened
             if raw_text == None:
                 continue
             print(f"\tWebpage length (num characters): {len(raw_text)}")
@@ -157,6 +164,8 @@ def main():
             for j, sentence in enumerate(docs.sents):
                 num_of_sentences += 1
             print(f"\tExtracted {num_of_sentences} sentences. Processing each sentence one by one to check for presence of right pair of named entity types; if so, will run the second pipeline ...")
+            
+            # Counters for the extraction print for each URL
             sen_counter = 0
             rel_counter = 0
             extracted = 0
@@ -172,10 +181,15 @@ def main():
                     rel_counter += rc
                     extracted += ec
                 else:
+                    # Check if the sentence has valid relationship entities to make call to Gemini API
                     if not module_gemini.make_call_to_api(sentence, r):
                         continue
+                    # Get prompt text based on the provided relation r
                     prompt_text = module_gemini.get_prompt_text(q, r, sentence)
+                    # Generate response using Gemini API key
                     response_text = module_gemini.get_gemini_completion(prompt_text, gemini_api_key)
+
+                    # Proceed if Gemini returns Subject - Object relation in the response text
                     if "Subject" in response_text and "Object" in response_text and response_text.strip() not in all_relations:
                         response_text_lines = response_text.strip().split("\n")
                         sen_counter += 1
@@ -200,16 +214,19 @@ def main():
                                     print(f"\tExtraction: {line.strip()}")
                                     print("\tDuplicate. Ignoring this.")
                                     print("\t==========\n")
-                    # else:
-                    #     print(f"\tNo valid relation extracted from this sentence or duplicate found.\n")
 
             print(f"Extracted annotations for  {sen_counter}  out of total  {num_of_sentences}  sentences")
             print(f"Relations extracted from this website: {extracted} (Overall: {rel_counter})")
+        # Track the previous query to check if the new query is the same.
+        # If they are the same there was no tuple extraction.
+        # Thus, it is impossible to go to a new iteration.
         prev_q = q
         if model == "-spanbert":
+            # Sort by confidence to get the new query
             sorted_items = sorted(res.items(), key=lambda x: x[1], reverse=True)
             for key, value in sorted_items:
                 new_q = key[0] + " " + key[2]
+                # Check if the query was used before
                 if new_q in used_q:
                     continue
                 else:
@@ -225,6 +242,7 @@ def main():
                 object_part = parts[1].split(": ")[1]
                 # Join the extracted strings into a new string
                 new_str = subject_part + " " + object_part
+                # Check if the query was used before
                 if new_str in used_q:
                     continue
                 else:
