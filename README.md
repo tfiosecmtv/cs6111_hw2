@@ -1,4 +1,4 @@
-# E6111 Project 1 
+# E6111 Project 2 
 This is our README of our project 2. We achieve k tuples within the reasonable amount of iteration and we see the completed results within equal or less than the iterations the reference project takes for both SpanBERT and Gemini. We have commented the code with detail with explanation for each functions and commands. We have described our projects of how to run, explained clear descriptions of our project, and wrote out clear description of our query modification method below.
 
 ## Authors
