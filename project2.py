@@ -173,8 +173,6 @@ def main():
             for j, sentence in enumerate(docs.sents):
                 if(j != 0 and j % 5 == 0):
                     print(f"\tProcessed {j} / {num_of_sentences} sentences")
-                if iteration > 1 and len(all_relations) >= k:
-                    break
                 if model == "-spanbert":
                     sc, rc, ec = module_spanbert.spanbert_process(spanbert, t, r, sentence, res)
                     sen_counter += sc
