@@ -2,14 +2,18 @@ import re
 import google.generativeai as genai 
 from spacy_help_functions import get_entities, create_entity_pairs
 
-
+#We declare a list with entity of interests as shown below
 entities_of_interest = ["ORGANIZATION", "PERSON", "LOCATION", "CITY", "STATE_OR_PROVINCE", "COUNTRY"]
 
-
+#We make function called make call to api to create entity pairs for gemini
 def make_call_to_api(sentence, r):
+    #Sentence entity_pairs function here to create entity pairs
     sentence_entity_pairs = create_entity_pairs(sentence, entities_of_interest)
+    #We do a for loop
     for ep in sentence_entity_pairs:
         # To minimize the use, use subject-object tuples with the relevant entities depending on r
+        # If valid pair is found according to criteria, we return True. If not, we return False
+        # Different scenario is listed below and it's clearly laid out
         if r==1 or r==2:
           if ep[1][1] == 'PERSON' and ep[2][1] == 'ORGANIZATION':
             return True # e1=Subject, e2=Object
@@ -35,9 +39,16 @@ def check_string_regex(s):
 
 def get_prompt_text(q, relation_type, sentence):
     # Relation types to specific prompt formats, one can use 1,2,3,4
-    # TODO: We may need to get this more refined
+    # Refined prompts to do the relation. Used prompts as shown below for 1-4 relation types for specific prompt texts
+    # Each template is designed to extract different relationships
+    # Due to Gemini's inconsistency, we experiemented with several prompts to give best results compared to the transcript
+    # Based on TA's advice, we experiemented the prompts that fit input/output and are most consistent and give best and specific results
     prompts = {
-        1: f"Prompt: Given the sentence, extract all instances where person's name (subjects) and educational institutions (objects) are mentioned together. For objects or subjects, do not include companies like Google/Microsoft as they are not educational institution. Try to remove pronouns like he/she and ensure person’s name is human name. For each identified relationship: Ensure the subject is a person's name and confirm the object is a legitimate educational institution, identifiable by keywords such University, College, School, or Academy. Format each relationship found in the sentence as follows: Subject: [PERSON'S NAME] | Object: [ORGANIZATION]\nSentence: {sentence}",
+        1: f"Prompt: Given the sentence, extract all instances where person's name (subjects) and educational institutions (objects) are mentioned together."
+    f"For objects or subjects, do not include companies like Google/Microsoft as they are not educational institution."
+    f"Try to remove pronouns like he/she and ensure person’s name is human name."
+    f"For each identified relationship: Ensure the subject is a person's name and confirm the object is a legitimate educational institution, identifiable by keywords such University, College, School, or Academy."
+    f"Format each relationship found in the sentence as follows: Subject: [PERSON'S NAME] | Object: [ORGANIZATION]\nSentence: {sentence}",
         2: f"Prompt: Analyze the given sentence to identify and extract all instances that clearly indicate an employment "
     f"relationship, focusing on where a person's name (subject) is associated with an organization (object) they work for. "
     f"Clarify that subjects should be identifiable human names, avoiding any confusion with companies, subsidiaries, "
@@ -78,6 +89,7 @@ Implementation should validate:
 Avoid false positives and ensure clear association between subject and object. Given sentence: {sentence}
 """
     }
+    #We retrieve and return the relation 
     return prompts.get(relation_type, "Invalid relation type.")
 
 # Function to get content generation from the Gemini API
@@ -99,6 +111,7 @@ def get_gemini_completion(prompt_text, api_key, model_name='gemini-pro', max_tok
     try:
         # Create response based on the prompt text and configuration
         response = model.generate_content(prompt_text, generation_config=generation_config)
+        # We return the response text
         return response.text
     except Exception as e:
         print(f"\tError during Gemini completion: {str(e)}")
